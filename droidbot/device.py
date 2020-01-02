@@ -618,12 +618,13 @@ class Device(object):
             if self.grant_perm and self.get_sdk_version() >= 23:
                 install_cmd.append("-g")
             install_cmd.append(app.app_path)
-            install_p = subprocess.Popen(install_cmd, stdout=subprocess.PIPE)
-            while self.connected and package_name not in self.adb.get_installed_apps():
-                print("Please wait while installing the app...")
-                time.sleep(2)
-            if not self.connected:
-                install_p.terminate()
+            print("Please wait while installing the app...")
+            subprocess.call(install_cmd)
+            # while self.connected and package_name not in self.adb.get_installed_apps():
+                # print("Please wait while installing the app...")
+                # time.sleep(2)
+            if package_name not in self.adb.get_installed_apps() or not self.connected:
+                print("Error installing app")
                 return
 
         dumpsys_p = subprocess.Popen(["adb", "-s", self.serial, "shell",

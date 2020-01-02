@@ -49,9 +49,6 @@ class DroidBot(object):
         initiate droidbot with configurations
         :return:
         """
-        logging.basicConfig(level=logging.DEBUG if debug_mode else logging.INFO)
-
-        self.logger = logging.getLogger('DroidBot')
         DroidBot.instance = self
 
         self.output_dir = output_dir
@@ -65,6 +62,21 @@ class DroidBot(object):
                 shutil.rmtree(target_stylesheets_dir)
             shutil.copy(html_index_path, output_dir)
             shutil.copytree(stylesheets_path, target_stylesheets_dir)
+        
+        logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+        rootLogger = logging.getLogger()
+
+        fileHandler = logging.FileHandler(output_dir + "/log.txt")
+        fileHandler.setFormatter(logFormatter)
+        rootLogger.addHandler(fileHandler)
+
+        consoleHandler = logging.StreamHandler()
+        consoleHandler.setFormatter(logFormatter)
+        rootLogger.addHandler(consoleHandler)
+        
+        rootLogger.setLevel(logging.DEBUG if debug_mode else logging.INFO)
+
+        self.logger = logging.getLogger('DroidBot')
 
         self.timeout = timeout
         self.timer = None
@@ -132,10 +144,6 @@ class DroidBot(object):
             return
         self.logger.info("Starting DroidBot")
         try:
-            if self.timeout > 0:
-                self.timer = Timer(self.timeout, self.stop)
-                self.timer.start()
-
             self.device.set_up()
 
             if not self.enabled:
@@ -149,6 +157,10 @@ class DroidBot(object):
             if not self.enabled:
                 return
             self.env_manager.deploy()
+            
+            if self.timeout > 0:
+                self.timer = Timer(self.timeout, self.stop)
+                self.timer.start()
 
             if not self.enabled:
                 return

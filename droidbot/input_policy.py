@@ -4,6 +4,8 @@ import logging
 import random
 from abc import abstractmethod
 
+from nomoats.frida_controller import FridaController
+
 from .input_event import InputEvent, KeyEvent, IntentEvent, TouchEvent, ManualEvent, SetTextEvent
 from .utg import UTG
 
@@ -55,18 +57,30 @@ class InputPolicy(object):
         start producing events
         :param input_manager: instance of InputManager
         """
+        frida_controller = FridaController(self.device.output_dir, self.app.get_package_name())
+        frida_controller.start_app()
+                    
         count = 0
-        while input_manager.enabled and count < input_manager.event_count:
+        while (input_manager.enabled and frida_controller.enabled
+                and count < input_manager.event_count):
             try:
                 # make sure the first event is go to HOME screen
                 # the second event is to start the app
-                if count == 0 and self.master is None:
-                    event = KeyEvent(name="HOME")
-                elif count == 1 and self.master is None:
-                    event = IntentEvent(self.app.get_start_intent())
-                else:
-                    event = self.generate_event()
+                #if count == 0 and self.master is None:
+                #    event = KeyEvent(name="HOME")
+                #elif count == 1 and self.master is None:
+                #    event = IntentEvent(self.app.get_start_intent())
+                #else:
+                event = self.generate_event()
                 input_manager.add_event(event)
+                
+                # If we restarted the app, we need to reattach Frida
+                if (self.current_state is not None 
+                    and self.current_state.get_app_activity_depth(self.app) < 0 
+                    and self.is_start_event(event)):
+                    self.logger.info("App was started again. Make sure Frida still attached.")
+                    frida_controller.start_app()                  
+                
             except KeyboardInterrupt:
                 break
             except InputInterruptedException as e:
@@ -81,6 +95,16 @@ class InputPolicy(object):
                 traceback.print_exc()
                 continue
             count += 1
+            
+        self.logger.info("stopping Frida")
+        frida_controller.stop()
+        
+    def is_start_event(self, event):
+        if isinstance(event, IntentEvent):
+            intent_cmd = event.intent
+            if "start" in intent_cmd and self.app.get_package_name() in intent_cmd:
+                return True
+        return False
 
     @abstractmethod
     def generate_event(self):
@@ -462,9 +486,12 @@ class UtgGreedySearchPolicy(UtgBasedInputPolicy):
 
         # If couldn't find a exploration target, stop the app
         stop_app_intent = self.app.get_stop_intent()
-        self.logger.info("Cannot find an exploration target. Trying to restart app...")
-        self.__event_trace += EVENT_FLAG_STOP_APP
-        return IntentEvent(intent=stop_app_intent)
+        self.logger.info("Cannot find an exploration target. Entering random mode...")
+        self.__random_explore = True
+        random.shuffle(possible_events)
+        return possible_events[0]
+        # self.__event_trace += EVENT_FLAG_STOP_APP
+        # return IntentEvent(intent=stop_app_intent)
 
     def __sort_inputs_by_humanoid(self, possible_events):
         if sys.version.startswith("3"):
